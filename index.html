@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#145c48">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Param Nerede">
+<title>Param Nerede?</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#172b25;
+background:#f3f6f4}
+*{box-sizing:border-box}
+body{margin:0}
+main{max-width:720px;margin:auto;padding:20px 16px 60px}
+h1{font-size:28px;margin:5px 0}
+h2{font-size:19px;margin:0 0 14px}
+p{line-height:1.5}
+.muted,small{color:#586a63}
+.box{background:white;border:1px solid #dce6df;border-radius:18px;
+padding:18px;margin:16px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:block;font-size:14px;margin-bottom:12px}
+input,select,button,textarea{font:inherit}
+input,select,textarea{display:block;width:100%;padding:12px;
+margin-top:6px;border:1px solid #bacbc2;border-radius:10px;
+background:#fff;color:#172b25;font-size:16px}
+button{border:0;border-radius:11px;padding:13px 15px;
+background:#145c48;color:white;cursor:pointer}
+button.secondary{background:#edf3ef;color:#173d2f}
+button.danger{background:#fff0ee;color:#a32929}
+.wide{width:100%}
+.actions{display:flex;flex-wrap:wrap;gap:9px}
+.stat{background:#f1f6f3;padding:13px;border-radius:12px}
+.stat span{display:block;font-size:13px;color:#52675d}
+.stat strong{display:block;font-size:20px;margin-top:6px;
+overflow-wrap:anywhere}
+.row{padding:13px 0;border-bottom:1px solid #edf0ee}
+.rowtop{display:flex;justify-content:space-between;gap:12px}
+.row button{padding:5px 9px;font-size:12px;margin-top:7px}
+.notice{background:#fff6db;padding:12px;border-radius:12px;
+font-size:14px;line-height:1.5}
+summary{cursor:pointer;font-weight:650}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 system-ui}
+#report{display:none}
+@media print{
+body{background:white}
+main>*{display:none!important}
+#report{display:block!important;border:0;padding:0}
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Param Nerede?</h1>
+<p class="muted">Gelirini, harcamanı ve kartını sade biçimde takip et.</p>
+
+<div class="notice">
+Veriler yalnızca bu tarayıcıda saklanır; şifreli kasa değildir.
+Haftalık yedek al. Banka şifresi, IBAN veya kart numarası girme.
+</div>
+
+<details class="box" id="setup">
+<summary>1. Başlangıç bilgileri</summary>
+<p class="muted">
+Başlangıç tarihindeki banka ve nakit toplamını, ayrıca kart borcunu gir.
+Bu tarihten önceki harcamaları yeniden ekleme.
+Birden çok hesabın/kartın varsa bu basit sürümde toplamlarını kullan.
+</p>
+<form id="setupForm">
+<label>Takibe başlama tarihi
+<input id="start" type="date" required>
+</label>
+<label>O tarihte banka + nakit toplamı (TL)
+<input id="openingCash" inputmode="decimal" placeholder="Örnek: 10000" required>
+</label>
+<label>O tarihte toplam kredi kartı borcu (TL)
+<input id="openingDebt" inputmode="decimal" placeholder="Örnek: 47000" required>
+</label>
+<button class="wide">Başlangıç bilgilerini kaydet</button>
+</form>
+<p><small>
+Kart için bankada görünen mevcut borcu esas al.
+Henüz borca yansımayan gelecek taksitler ayrıca takip edilmez.
+</small></p>
+</details>
+
+<section class="box">
+<h2>Bu ayın özeti</h2>
+<label>Ay seç<input id="month" type="month"></label>
+<div class="grid" id="stats"></div>
+<p><small>
+Gelir − harcama, hesabında kalan nakitle aynı değildir.
+Kart ödemeleri ve yatırım hareketleri nakdi ayrıca değiştirir.
+</small></p>
+</section>
+
+<section class="box">
+<h2>Kayıtlara göre bugünkü durum</h2>
+<div class="grid" id="balances"></div>
+<p><small>
+Banka + nakit toplamı hesaplarındaki parayı gösterir;
+tamamı serbestçe harcanabilir değildir. Yatırımlar bu bakiyeye dahil değil.
+Kart tutarı bankanın resmi ekstresi değil, girdiğin kayıtlardan hesaplanır.
+</small></p>
+</section>
+
+<section class="box">
+<h2>+ İşlem ekle</h2>
+<form id="entryForm">
+<div class="grid">
+<label>Tarih<input id="date" type="date" required></label>
+<label>Tutar (TL)
+<input id="amount" inputmode="decimal" placeholder="Örnek: 1250,50" required>
+</label>
+</div>
+<label>İşlem türü
+<select id="kind">
+<option value="income">Gelir</option>
+<option value="cashExpense">Banka / nakit harcaması</option>
+<option value="cardExpense">Kredi kartıyla harcama</option>
+<option value="cardPayment">Kredi kartı borcu ödeme</option>
+<option value="investOut">Yatırıma para gönderme</option>
+<option value="investIn">Yatırımdan para çekme</option>
+<option value="cashRefund">Bankaya / nakde harcama iadesi</option>
+<option value="cardRefund">Karta harcama iadesi</option>
+</select>
+</label>
+<label>Kategori<select id="category"></select></label>
+<label>Açıklama — isteğe bağlı
+<input id="note" maxlength="160" placeholder="Örnek: Haftalık market">
+</label>
+<button class="wide">İşlemi kaydet</button>
+</form>
+<p><small>
+Kartla alışveriş harcamadır. Kart borcunu ödemek tekrar harcama değildir.
+Kendi banka hesapların arasındaki transferleri girme; bu sürüm onları
+tek toplamda izler. Gelecek tarihli işlemleri gerçekleşince ekle.
+</small></p>
+</section>
+
+<section class="box">
+<h2>Seçili ayın işlemleri</h2>
+<div id="entries"></div>
+</section>
+
+<section class="box">
+<h2>Rapor ve yedek</h2>
+<label>Bu ay hakkında not — isteğe bağlı
+<textarea id="monthNote" rows="3"
+placeholder="Örnek: Bu ay araç sigortası ödendi."></textarea>
+</label>
+<label style="display:flex;align-items:center;gap:8px">
+<input id="complete" type="checkbox" style="width:auto;margin:0">
+Bu ayın rapor tarihine kadarki kayıtları tamam.
+</label>
+<p><small>
+Paylaşım raporu işlem açıklamalarını gizler. Aylık notu içerir.
+Tam yedek ise açıklamalar dahil bütün verileri içerir.
+</small></p>
+<div class="actions">
+<button id="copyReport">Raporu kopyala</button>
+<button id="txtReport" class="secondary">TXT rapor indir</button>
+<button id="printReport" class="secondary">Yazdır / PDF</button>
+<button id="backup" class="secondary">Tam yedek indir</button>
+<button id="restore" class="secondary">Yedeği geri yükle</button>
+</div>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<p><small>
+Ay sonunda raporu paylaş; tam yedeği kendine sakla.
+“Yedeği geri yükle” mevcut kayıtların yerine yedekteki kayıtları koyar.
+</small></p>
+</section>
+
+<section class="box" id="report">
+<h2>Paylaşılabilir rapor</h2>
+<pre id="reportText"></pre>
+</section>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const KEY = "paramNerede_v1";
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const money = n => new Intl.NumberFormat("tr-TR", {
+  style:"currency",currency:"TRY"
+}).format(n/100);
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const names = {
+  income:"Gelir",cashExpense:"Banka/nakit harcaması",
+  cardExpense:"Kart harcaması",cardPayment:"Kart ödemesi",
+  investOut:"Yatırıma gönderme",investIn:"Yatırımdan çekme",
+  cashRefund:"Nakit/banka iadesi",cardRefund:"Kart iadesi"
+};
+const expenseCats = [
+  "Kira","Market / gıda","Temizlik / ev ihtiyaçları","Elektrik","Su",
+  "Doğalgaz","İnternet / telefon","Yakıt","Araç bakım / onarım",
+  "Araç vergi / sigorta / muayene","Sağlık","Yemek / kafe","Giyim",
+  "Abonelikler","Aile / kişisel","Kart faizi / banka ücreti","Diğer"
+];
+function validDate(s){
+  if(typeof s!=="string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d=new Date(s+"T12:00:00Z");
+  return !isNaN(d) && d.toISOString().slice(0,10)===s;
+}
+function validState(s){
+  return s && s.version===1 && validDate(s.start) &&
+    Number.isSafeInteger(s.cash) && Number.isSafeInteger(s.debt) &&
+    Array.isArray(s.entries) &&
+    s.entries.every(e=>e && typeof e.id==="string" &&
+      validDate(e.date) && e.date>=s.start &&
+      Object.hasOwn(names,e.kind) &&
+      Number.isSafeInteger(e.amount) && e.amount>0 &&
+      typeof e.category==="string" && typeof e.note==="string") &&
+    new Set(s.entries.map(e=>e.id)).size===s.entries.length &&
+    s.notes && typeof s.notes==="object" && !Array.isArray(s.notes) &&
+    Object.values(s.notes).every(n=>n &&
+      typeof n.text==="string" && typeof n.complete==="boolean");
+}
+let state = {
+  version:1,start:today(),cash:0,debt:0,entries:[],notes:{}
+};
+let storageProblem=false;
+try{
+  const raw=localStorage.getItem(KEY);
+  if(raw){
+    const parsed=JSON.parse(raw);
+    if(!validState(parsed)) throw Error("Geçersiz kayıt");
+    state=parsed;
+  }
+}catch(e){
+  storageProblem=true;
+  alert("Kayıtlar okunamadı. Eski verinin üzerine yazılmaması için kayıt kapatıldı. Tarayıcı ayarlarını kontrol et veya geçerli bir yedek yükle.");
+}
+function save(next, restoring=false){
+  if(storageProblem && !restoring){
+    alert("Depolama sorunu nedeniyle kaydedilemedi.");return false;
+  }
+  try{
+    localStorage.setItem(KEY,JSON.stringify(next));
+    state=next;storageProblem=false;return true;
+  }catch(e){
+    alert("Kaydedilemedi. Tarayıcı depolaması kapalı veya dolu olabilir. İşlem kaydedilmiş sayılmaz.");
+    return false;
+  }
+}
+function parseAmount(v){
+  v=v.trim().replace(",",".");
+  if(!/^\d+(\.\d{1,2})?$/.test(v))
+    throw Error("Tutarı binlik ayıracı olmadan yaz: 1250,50");
+  const [a,b=""]=v.split(".");
+  const n=Number(a)*100+Number(b.padEnd(2,"0"));
+  if(!Number.isSafeInteger(n)) throw Error("Tutar çok büyük.");
+  return n;
+}
+function categories(){
+  const k=$("kind").value;
+  let list=expenseCats;
+  if(k==="income") list=["Maaş","Ek ders","Diğer gelir"];
+  if(k==="cardPayment") list=["Kart ödemesi"];
+  if(k==="investOut" || k==="investIn")
+    list=["Fon","Altın","Kripto","BES","Diğer yatırım"];
+  $("category").innerHTML=list.map(x=>`<option>${esc(x)}</option>`).join("");
+}
+function balanceBefore(date, inclusive=false){
+  let cash=state.cash,debt=state.debt;
+  for(const e of state.entries){
+    if(inclusive ? e.date>date : e.date>=date) continue;
+    const a=e.amount;
+    switch(e.kind){
+      case "income":case "investIn":case "cashRefund":cash+=a;break;
+      case "cashExpense":case "investOut":cash-=a;break;
+      case "cardExpense":debt+=a;break;
+      case "cardPayment":cash-=a;debt-=a;break;
+      case "cardRefund":debt-=a;break;
+    }
+  }
+  return {cash,debt};
+}
+function period(){
+  const m=$("month").value;
+  if(!/^\d{4}-\d{2}$/.test(m)) return null;
+  const first=m+"-01";
+  const y=Number(m.slice(0,4)),mo=Number(m.slice(5));
+  const last=`${m}-${new Date(y,mo,0).getDate()}`;
+  const from=first>state.start ? first:state.start;
+  const to=last<today() ? last:today();
+  if(from>to) return null;
+  const rows=state.entries.filter(e=>e.date>=from && e.date<=to);
+  const sum=k=>rows.filter(e=>e.kind===k).reduce((s,e)=>s+e.amount,0);
+  const income=sum("income");
+  const expense=sum("cashExpense")+sum("cardExpense")
+    -sum("cashRefund")-sum("cardRefund");
+  return {from,to,rows,sum,income,expense,
+    opening:balanceBefore(from),closing:balanceBefore(to,true)};
+}
+function stat(label,value){
+  return `<div class="stat"><span>${esc(label)}</span><strong>${money(value)}</strong></div>`;
+}
+function render(){
+  const p=period();
+  $("stats").innerHTML=p ? [
+    stat("Gelir",p.income),stat("Harcama (iadeler düşülmüş)",p.expense),
+    stat("Gelir − harcama",p.income-p.expense),
+    stat("Net yatırım aktarımı",p.sum("investOut")-p.sum("investIn"))
+  ].join("") : "<p>Bu ay için takip dönemi yok.</p>";
+  const b=balanceBefore(today(),true);
+  $("balances").innerHTML=stat("Banka + nakit",b.cash)+
+    stat(b.debt>=0?"Kart borcu":"Kartta alacak bakiyesi",Math.abs(b.debt));
+  const rows=p ? [...p.rows].sort((a,b)=>b.date.localeCompare(a.date)):[];
+  $("entries").innerHTML=rows.length ? rows.map(e=>`
+    <div class="row">
+      <div class="rowtop">
+        <strong>${esc(e.category)}</strong><strong>${money(e.amount)}</strong>
+      </div>
+      <small>${esc(e.date)} · ${esc(names[e.kind])}</small>
+      ${e.note?`<div>${esc(e.note)}</div>`:""}
+      <button class="danger" data-delete="${esc(e.id)}">Sil</button>
+    </div>`).join("") : "<p class='muted'>Henüz işlem yok.</p>";
+  const note=state.notes[$("month").value]||{text:"",complete:false};
+  $("monthNote").value=note.text;
+  $("complete").checked=note.complete;
+  $("report").style.display="none";
+}
+function report(){
+  const p=period();
+  if(!p) return "Seçili ay için raporlanabilir dönem yok.";
+  const n=state.notes[$("month").value]||{text:"",complete:false};
+  const cats=new Map();
+  for(const e of p.rows){
+    let sign=0;
+    if(e.kind==="cashExpense" || e.kind==="cardExpense") sign=1;
+    if(e.kind==="cashRefund" || e.kind==="cardRefund") sign=-1;
+    if(sign) cats.set(e.category,(cats.get(e.category)||0)+sign*e.amount);
+  }
+  const lines=[
+    "PARAM NEREDE? — AYLIK RAPOR",
+    `Dönem: ${p.from} – ${p.to}`,
+    `Oluşturulma: ${today()}`,
+    `Kayıtların tamlığı: ${n.complete?"Kullanıcı tamam olduğunu belirtti":"Tam olduğu onaylanmadı"}`,
+    "",
+    `Gelir: ${money(p.income)}`,
+    `Harcama (iadeler düşülmüş): ${money(p.expense)}`,
+    `Gelir − harcama: ${money(p.income-p.expense)}`,
+    `Yatırıma gönderilen: ${money(p.sum("investOut"))}`,
+    `Yatırımdan çekilen: ${money(p.sum("investIn"))}`,
+    `Net yatırım aktarımı: ${money(p.sum("investOut")-p.sum("investIn"))}`,
+    `Kart ödemeleri (gider değildir): ${money(p.sum("cardPayment"))}`,
+    "",
+    "DÖNEM BAŞI → DÖNEM SONU",
+    `Banka + nakit: ${money(p.opening.cash)} → ${money(p.closing.cash)}`,
+    `Kayıtlı kart borcu: ${money(p.opening.debt)} → ${money(p.closing.debt)}`,
+    "",
+    "BANKA / NAKİT AKIŞI",
+    `Gelir girişleri: +${money(p.income)}`,
+    `Doğrudan harcamalar: -${money(p.sum("cashExpense"))}`,
+    `Kart ödemeleri: -${money(p.sum("cardPayment"))}`,
+    `Nakit/banka iadeleri: +${money(p.sum("cashRefund"))}`,
+    `Yatırıma gönderme: -${money(p.sum("investOut"))}`,
+    `Yatırımdan çekme: +${money(p.sum("investIn"))}`,
+    `Net nakit değişimi: ${money(p.closing.cash-p.opening.cash)}`,
+    "",
+    "HARCAMA DAĞILIMI",
+    ...[...cats].sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${money(v)}`),
+    "",
+    `İŞLEM DÖKÜMÜ (${p.rows.length} işlem; açıklamalar gizli)`,
+    ...[...p.rows].sort((a,b)=>a.date.localeCompare(b.date))
+      .map(e=>`${e.date} | ${names[e.kind]} | ${e.category} | ${money(e.amount)}`),
+    "",
+    "AYLIK NOT",
+    n.text||"Not yok.",
+    "",
+    "SINIRLAR",
+    "Bu rapor kullanıcının kayıtlarına dayanır. Gelecek taksitleri,",
+    "eksik işlemleri ve yatırım değerlerini içermez. Gelir-harcama farkı",
+    "tek başına yatırıma hazır para veya yatırım getirisi değildir."
+  ];
+  return lines.join("\n");
+}
+function showReport(){
+  const text=report();
+  $("reportText").textContent=text;
+  $("report").style.display="block";
+  return text;
+}
+function download(text,name,type){
+  const url=URL.createObjectURL(new Blob([text],{type}));
+  const a=document.createElement("a");
+  a.href=url;a.download=name;document.body.appendChild(a);
+  a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function backup(){
+  download(JSON.stringify(state,null,2),
+    `param-nerede-yedek-${today()}.json`,"application/json");
+}
+$("setupForm").onsubmit=e=>{
+  e.preventDefault();
+  try{
+    const start=$("start").value;
+    if(!validDate(start)||start>today()) throw Error("Geçerli bir başlangıç tarihi seç.");
+    if(state.entries.some(x=>x.date<start))
+      throw Error("Bazı işlemler bu tarihten önce. Başlangıcı ileri taşıyamazsın.");
+    const next={...state,start,cash:parseAmount($("openingCash").value),
+      debt:parseAmount($("openingDebt").value)};
+    if(state.entries.length && !confirm("Başlangıç değerleri değişirse hesaplanan bakiyeler de değişir. Devam?")) return;
+    if(save(next)){$("setup").open=false;render();}
+  }catch(err){alert(err.message);}
+};
+$("entryForm").onsubmit=e=>{
+  e.preventDefault();
+  try{
+    const amount=parseAmount($("amount").value),date=$("date").value;
+    if(amount<=0) throw Error("Tutar sıfırdan büyük olmalı.");
+    if(!validDate(date)||date<state.start||date>today())
+      throw Error("Tarih, başlangıç tarihi ile bugün arasında olmalı.");
+    const kind=$("kind").value;
+    if(state.entries.some(x=>x.date===date&&x.amount===amount&&x.kind===kind)
+      && !confirm("Aynı tarih, tür ve tutarda kayıt var. Yine de ekle?")) return;
+    const entry={id:crypto.randomUUID(),date,amount,kind,
+      category:$("category").value,note:$("note").value.trim()};
+    if(save({...state,entries:[...state.entries,entry]})){
+      $("month").value=date.slice(0,7);
+      $("amount").value="";$("note").value="";render();
+    }
+  }catch(err){alert(err.message);}
+};
+$("entries").onclick=e=>{
+  const id=e.target.dataset.delete;
+  if(!id||!confirm("Bu işlem silinsin mi?")) return;
+  if(save({...state,entries:state.entries.filter(x=>x.id!==id)})) render();
+};
+function saveNote(){
+  const m=$("month").value;
+  if(!m) return;
+  save({...state,notes:{...state.notes,
+    [m]:{text:$("monthNote").value,complete:$("complete").checked}}});
+}
+$("monthNote").onchange=saveNote;
+$("complete").onchange=saveNote;
+$("kind").onchange=categories;
+$("month").onchange=render;
+$("copyReport").onclick=async()=>{
+  const text=showReport();
+  try{await navigator.clipboard.writeText(text);alert("Rapor kopyalandı. Sohbete yapıştırabilirsin.");}
+  catch(e){alert("Otomatik kopyalanamadı. Aşağıdaki raporu seçip kopyala veya TXT indir.");}
+};
+$("txtReport").onclick=()=>download(showReport(),
+  `param-nerede-${$("month").value}.txt`,"text/plain;charset=utf-8");
+$("printReport").onclick=()=>{showReport();window.print();};
+$("backup").onclick=backup;
+$("restore").onclick=()=>{$("file").value="";$("file").click();};
+$("file").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    if(f.size>10*1024*1024) throw Error("Yedek dosyası çok büyük.");
+    const next=JSON.parse(await f.text());
+    if(!validState(next)) throw Error("Bu dosya geçerli bir uygulama yedeği değil.");
+    if(!confirm("Mevcut kayıtların yerine yedek yüklenecek. Önce mevcut yedeğini indirdin mi? Devam edilsin mi?")) return;
+    if(save(next,true)){fillSetup();render();alert("Yedek yüklendi.");}
+  }catch(err){alert("Yüklenemedi: "+err.message);}
+};
+function fillSetup(){
+  $("start").value=state.start;
+  $("openingCash").value=(state.cash/100).toFixed(2);
+  $("openingDebt").value=(state.debt/100).toFixed(2);
+  $("date").min=state.start;$("date").max=today();
+}
+$("month").value=today().slice(0,7);
+$("date").value=today();
+fillSetup();categories();render();
+if(!state.entries.length) $("setup").open=true;
+</script>
+</body>
+</html>
